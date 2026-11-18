@@ -38,6 +38,14 @@ header{margin-bottom:28px}
 .logo-testa{margin:0;line-height:0}
 .area{margin:14px 0 0;font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .gruppo{display:flex;flex-direction:column;gap:14px;margin-bottom:34px}
+.tabs{position:sticky;top:0;z-index:5;display:flex;gap:6px;padding:6px;margin:0 0 22px;background:var(--surface);border:1px solid var(--line);border-radius:999px;box-shadow:0 8px 20px -14px rgba(0,0,0,.35)}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;border:0;background:transparent;border-radius:999px;padding:12px 14px;font:inherit;font-weight:700;font-size:17px;color:var(--muted);cursor:pointer;transition:background .2s ease,color .2s ease}
+.tab .ini{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--line);color:var(--ink);font-size:14px;transition:inherit}
+.tab[aria-selected="true"]{background:var(--accent);color:#fff}
+.tab[aria-selected="true"] .ini{background:#fff;color:var(--accent)}
+.tab:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.tab .n{font-size:12px;font-weight:600;opacity:.75}
+@media (prefers-reduced-motion:reduce){.tab,.tab .ini{transition:none}}
 .gruppo h2.tit{align-self:flex-start;grid-area:auto;font-family:var(--display);font-weight:800;font-size:28px;margin:0;display:flex;align-items:center;gap:12px}
 .gruppo h2.tit .ini{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;font-size:18px;font-family:var(--body)}
 .app{display:block;font-family:var(--body);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--c);margin:0 0 4px}
@@ -122,6 +130,7 @@ footer{margin-top:40px;font-size:13px;color:var(--muted)}
   .badge{padding:9px 22px 9px 9px}
   .badge .ico{width:40px;height:40px;font-size:18px}
 }
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -156,11 +165,31 @@ async function carica(){
     if (c) { try { history.replaceState(null, "", location.pathname); } catch(e) {} }
     if (d.riservato) { grid.innerHTML = '<div class="msg"><b>Pagina riservata.</b><br>Per entrare usa il link che ti abbiamo mandato.</div>'; return; }
     if (!r.ok) throw new Error(d.errore || r.status);
-    grid.innerHTML = d.gruppi.length ? d.gruppi.map(g => `
-      <section class="gruppo">
-        <h2 class="tit"><span class="ini" aria-hidden="true">${esc(g.nome.slice(0,1).toUpperCase())}</span>Per ${esc(g.nome)}</h2>
+    if (!d.gruppi.length) { grid.innerHTML = '<div class="msg">Non ci sono ancora link.</div>'; return; }
+    let scelto = 0;
+    try { const salvato = localStorage.getItem("staff_tab"); const i = d.gruppi.findIndex(g => g.nome === salvato); if (i >= 0) scelto = i; } catch(e) {}
+    const tabs = d.gruppi.length > 1 ? `<div class="tabs" role="tablist" aria-label="Scegli la persona">${d.gruppi.map((g, i) => `
+      <button class="tab" role="tab" id="tab${i}" aria-controls="pan${i}" aria-selected="${i===scelto}" tabindex="${i===scelto?0:-1}" data-i="${i}">
+        <span class="ini" aria-hidden="true">${esc(g.nome.slice(0,1).toUpperCase())}</span>${esc(g.nome)}
+      </button>`).join("")}</div>` : "";
+    grid.innerHTML = tabs + d.gruppi.map((g, i) => `
+      <section class="gruppo" role="tabpanel" id="pan${i}" aria-labelledby="tab${i}" ${i===scelto || d.gruppi.length===1 ? "" : "hidden"}>
+        ${d.gruppi.length === 1 ? `<h2 class="tit"><span class="ini" aria-hidden="true">${esc(g.nome.slice(0,1).toUpperCase())}</span>Per ${esc(g.nome)}</h2>` : ""}
         <div class="grid">${g.voci.map(scheda).join("")}</div>
-      </section>`).join("") : '<div class="msg">Non ci sono ancora link.</div>';
+      </section>`).join("");
+    const scegli = i => {
+      grid.querySelectorAll(".tab").forEach((t, k) => { t.setAttribute("aria-selected", k === i); t.tabIndex = k === i ? 0 : -1; });
+      grid.querySelectorAll(".gruppo").forEach((p, k) => p.hidden = k !== i);
+      try { localStorage.setItem("staff_tab", d.gruppi[i].nome); } catch(e) {}
+    };
+    grid.querySelectorAll(".tab").forEach(t => {
+      t.addEventListener("click", () => scegli(+t.dataset.i));
+      t.addEventListener("keydown", e => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        const n = d.gruppi.length, i = (+t.dataset.i + (e.key === "ArrowRight" ? 1 : n - 1)) % n;
+        scegli(i); grid.querySelector("#tab" + i).focus();
+      });
+    });
   }catch(e){
     grid.innerHTML = '<div class="msg">La pagina non si è caricata. Ricarica tra qualche secondo.</div>';
   }
