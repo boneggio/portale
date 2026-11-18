@@ -159,7 +159,7 @@ pre{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);bord
 <script src="/js/qrcode.js"></script>
 <script>
 const STATI = [["attivo","Attivo"],["spento","Sold out"],["arrivo","In arrivo"],["nascosto","Nascosto"]];
-let token = null, sezioni = [], dirty = false, codice = "";
+let token = null, sezioni = [], dirty = false, codice = "", versione = "0";
 const linkInvio = () => location.origin + "/?c=" + codice;
 try { token = localStorage.getItem("boneggio_sessione"); } catch(e) {}
 
@@ -247,6 +247,7 @@ function render(){
           <div class="fields">
             <label for="n${i}">Nome<input id="n${i}" data-f="nome" value="${esc(s.nome)}"></label>
             <label for="d${i}">Descrizione per i clienti<textarea id="d${i}" data-f="descrizione">${esc(s.descrizione)}</textarea></label>
+            <label for="p${i}">Scritta del pulsante<input id="p${i}" data-f="pulsante" value="${esc(s.pulsante)}" maxlength="30" placeholder="Prenota"></label>
             <label for="l${i}">Link a cui porta la scheda (per i siti riservati incolla quello con ?c=…)<input id="l${i}" data-f="link" value="${esc(s.link)}" inputmode="url"></label>
           </div>
         </details>
@@ -285,14 +286,15 @@ $("list").addEventListener("input", e => {
 $("save").addEventListener("click", async () => {
   $("save").disabled = true; $("status").textContent = "Salvataggio…";
   try{
-    const d = await api("admin", {method:"POST", body:{sezioni}});
-    sezioni = d.sezioni; render(); setDirty(false);
+    const d = await api("admin", {method:"POST", body:{sezioni, versione}});
+    sezioni = d.sezioni; versione = d.versione; render(); setDirty(false);
     $("status").textContent = "Salvato ✓ Il portale è già aggiornato"; $("status").className = "status saved";
   }catch(err){
     if (err.message !== "401"){ $("status").textContent = err.message; $("status").className = "status dirty"; $("save").disabled = false; }
   }
 });
 
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && token && !dirty) avvia(); });
 window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
 
 // ---- Sicurezza (codice a 6 cifre) ----
@@ -337,7 +339,7 @@ async function avvia(){
   if (!token) return mostraLogin();
   try{
     const d = await api("admin");
-    sezioni = d.sezioni; codice = d.codice || "";
+    sezioni = d.sezioni; codice = d.codice || ""; versione = d.versione || "0";
     $("linkInvio").textContent = linkInvio(); $("vedi").href = linkInvio();
     $("login").hidden = true; $("app").hidden = false; $("bar").hidden = false;
     render(); setDirty(false); secStato();

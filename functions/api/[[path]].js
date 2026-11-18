@@ -74,7 +74,7 @@ export async function onRequest(ctx) {
     if (path === "/admin") {
       const ok = await sessioneValida(request, env);
       if (!ok) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
-      if (request.method === "GET") return json({ sezioni: await leggiSezioni(env.DB, true), codice: await codiceAccesso(env.DB) });
+      if (request.method === "GET") return json({ sezioni: await leggiSezioni(env.DB, true), codice: await codiceAccesso(env.DB), versione: (await leggiImp(env.DB, "versione")) || "0" });
       if (request.method === "POST") return salva(request, env);
     }
     if (path.startsWith("/admin/2fa/")) {
@@ -101,6 +101,7 @@ async function preparaDB(db) {
     db.prepare("CREATE TABLE IF NOT EXISTS tentativi (ip TEXT, ts INTEGER)"),
     db.prepare("CREATE TABLE IF NOT EXISTS impostazioni (k TEXT PRIMARY KEY, v TEXT)")
   ]);
+  try { await db.prepare("ALTER TABLE sezioni ADD COLUMN pulsante TEXT").run(); } catch (e) { /* colonna già presente */ }
 }
 
 async function leggiSezioni(db, admin) {
@@ -113,6 +114,7 @@ async function leggiSezioni(db, admin) {
       nome: r.nome || s.nome,
       descrizione: r.descrizione || s.descrizione,
       link: r.link || s.link,
+      pulsante: r.pulsante || "Prenota",
       logo: s.logo,
       colore: s.colore,
       console: s.console,
@@ -123,7 +125,7 @@ async function leggiSezioni(db, admin) {
   if (admin) return elenco;
   // pubblico: niente nascoste, niente link console, link solo se attiva
   return elenco.filter(s => s.stato !== "nascosto").map(s => ({
-    id: s.id, nome: s.nome, descrizione: s.descrizione, logo: s.logo, colore: s.colore, stato: s.stato,
+    id: s.id, nome: s.nome, descrizione: s.descrizione, pulsante: s.pulsante, logo: s.logo, colore: s.colore, stato: s.stato,
     link: s.stato === "attivo" ? s.link : null
   }));
 }
@@ -158,6 +160,10 @@ async function pubblico(request, env) {
 async function salva(request, env) {
   const body = await request.json().catch(() => ({}));
   if (!Array.isArray(body.sezioni)) return json({ errore: "Dati mancanti" }, 400);
+  const versione = (await leggiImp(env.DB, "versione")) || "0";
+  if (String(body.versione ?? "") !== versione) {
+    return json({ errore: "Nel frattempo qualcuno ha salvato da un altro dispositivo. Ricarica la pagina e rifai la modifica.", conflitto: true }, 409);
+  }
   const noti = new Set(SEZIONI.map(s => s.id));
   const stmts = [];
   body.sezioni.forEach((s, i) => {
@@ -166,12 +172,14 @@ async function salva(request, env) {
     const link = String(s.link || "").trim();
     if (link && !/^https:\/\//i.test(link)) throw new Error("Il link di " + s.id + " deve iniziare con https://");
     stmts.push(env.DB.prepare(
-      "INSERT INTO sezioni (id, ordine, stato, nome, descrizione, link) VALUES (?1, ?2, ?3, ?4, ?5, ?6) " +
-      "ON CONFLICT(id) DO UPDATE SET ordine=?2, stato=?3, nome=?4, descrizione=?5, link=?6"
-    ).bind(s.id, i, stato, String(s.nome || "").slice(0, 80), String(s.descrizione || "").slice(0, 300), link.slice(0, 500)));
+      "INSERT INTO sezioni (id, ordine, stato, nome, descrizione, link, pulsante) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) " +
+      "ON CONFLICT(id) DO UPDATE SET ordine=?2, stato=?3, nome=?4, descrizione=?5, link=?6, pulsante=?7"
+    ).bind(s.id, i, stato, String(s.nome || "").slice(0, 80), String(s.descrizione || "").slice(0, 300), link.slice(0, 500), String(s.pulsante || "").trim().slice(0, 30)));
   });
-  if (stmts.length) await env.DB.batch(stmts);
-  return json({ ok: true, sezioni: await leggiSezioni(env.DB, true) });
+  const nuova = String(Date.now());
+  stmts.push(env.DB.prepare("INSERT INTO impostazioni (k, v) VALUES ('versione', ?1) ON CONFLICT(k) DO UPDATE SET v = ?1").bind(nuova));
+  await env.DB.batch(stmts);
+  return json({ ok: true, sezioni: await leggiSezioni(env.DB, true), versione: nuova });
 }
 
 // ------------------------------------------------------------------
