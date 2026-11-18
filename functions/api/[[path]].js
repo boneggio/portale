@@ -56,6 +56,16 @@ const SEZIONI = [
     colore: "#7b3f1d",
     link: "https://castagnacopo.boneggio.it/",
     console: "https://castagnacopo.boneggio.it/report.html"
+  },
+  {
+    id: "mieliamo",
+    nome: "MieliAmo",
+    descrizione: "Il miele dei nostri alveari di Boneggio, in vasetti.",
+    logo: "/loghi/mieliamo.svg",
+    colore: "#8F4E07",
+    link: "https://mieliamo.boneggio.it/",
+    console: "https://mieliamo.boneggio.it/report.html",
+    statoIniziale: "nascosto"   // resta nascosta finché non si mette il link con ?c= e la si attiva
   }
 ];
 
@@ -137,7 +147,7 @@ async function leggiSezioni(db, admin) {
       logo: s.logo,
       colore: s.colore,
       console: s.console,
-      stato: STATI.includes(r.stato) ? r.stato : "attivo",
+      stato: STATI.includes(r.stato) ? r.stato : (s.statoIniziale || "attivo"),
       ordine: Number.isInteger(r.ordine) ? r.ordine : 1000 + i
     };
   }).sort((a, b) => a.ordine - b.ordine);
@@ -251,6 +261,7 @@ const APP_STAFF = {
   oviamo:       { nome: "OviAmo",       logo: "/loghi/oviamo.svg",       colore: "#3f6b2a" },
   oliamo:       { nome: "OliAmo",       logo: "/loghi/oliamo.svg",       colore: "#3D7A0E" },
   castagnacopo: { nome: "Castagnacopo", logo: "/loghi/castagnacopo.svg", colore: "#7b3f1d" },
+  mieliamo:     { nome: "MieliAmo",     logo: "/loghi/mieliamo.svg",     colore: "#8F4E07" },
   casalaggiu:   { nome: "Casalaggiù",   logo: "/loghi/casalaggiu.svg",   colore: "#0f7b77" },
   altro:        { nome: "Boneggio",     logo: "/img/icona.svg",          colore: "#7a2a22" }
 };

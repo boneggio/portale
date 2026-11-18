@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="MieliAmo">
+  <circle cx="60" cy="60" r="58" fill="#8F4E07"/>
+  <circle cx="60" cy="60" r="51" fill="none" stroke="#F5B301" stroke-width="2" opacity="0.55"/>
+  <path d="M60 24 L88.6 40.5 L88.6 73.5 L60 90 L31.4 73.5 L31.4 40.5 Z" fill="#F5B301" stroke="#FFD45C" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M60 38 L76.5 47.5 L76.5 66.5 L60 76 L43.5 66.5 L43.5 47.5 Z" fill="#E8A317" stroke="#C27A12" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M60 84 C60 84 51.5 95.5 51.5 101 C51.5 105.7 55.3 109.5 60 109.5 C64.7 109.5 68.5 105.7 68.5 101 C68.5 95.5 60 84 60 84Z" fill="#F5B301"/>
+  <path d="M41 47 L41 62" stroke="#FFF4D6" stroke-width="3.5" stroke-linecap="round" opacity="0.8"/>
+  <path d="M56.5 98 C56.5 96 57.5 94 58.5 92.5" stroke="#FFF4D6" stroke-width="2.4" stroke-linecap="round" fill="none" opacity="0.85"/>
+  <g transform="translate(84 24) rotate(-14)">
+    <ellipse cx="-3" cy="-7" rx="6" ry="4.6" fill="#FFFFFF" opacity="0.92"/>
+    <ellipse cx="4" cy="-7.5" rx="5" ry="4" fill="#FFFFFF" opacity="0.92"/>
+    <ellipse cx="0" cy="0" rx="9" ry="6.2" fill="#FFD45C" stroke="#3A2408" stroke-width="1.6"/>
+    <path d="M-3 -5.6 V5.6 M2.6 -5.9 V5.9" stroke="#3A2408" stroke-width="2.6"/>
+    <circle cx="9" cy="0" r="3.6" fill="#3A2408"/>
+  </g>
+</svg>
