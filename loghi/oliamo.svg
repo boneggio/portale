@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="OliAmo">
+  <circle cx="60" cy="60" r="58" fill="#3F6A12"/>
+  <circle cx="60" cy="60" r="51" fill="none" stroke="#F5B800" stroke-width="2" opacity="0.55"/>
+  <path d="M60 18 C60 18 32 54 32 73 C32 89 44.5 101 60 101 C75.5 101 88 89 88 73 C88 54 60 18 60 18Z" fill="#F5B800"/>
+  <path d="M44 72 C44 63 48 56 52 50" stroke="#FFF3C4" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.85"/>
+  <path d="M60 95 C60 85 61 77 64 69" stroke="#2F520C" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  <path d="M60 83 C50 81 45 73 46 65 C55 67 60 74 60 83Z" fill="#3F6A12"/>
+  <path d="M63 73 C64 63 71 57 79 57 C78 66 72 72 63 73Z" fill="#5C8A22"/>
+  <ellipse cx="69" cy="85" rx="6.5" ry="8.5" transform="rotate(-20 69 85)" fill="#2F520C"/>
+  <ellipse cx="67" cy="82" rx="1.6" ry="2.8" transform="rotate(-20 67 82)" fill="#FFFFFF" opacity="0.6"/>
+</svg>
