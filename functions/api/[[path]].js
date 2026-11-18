@@ -63,8 +63,8 @@ const SEZIONI = [
     descrizione: "Il miele dei nostri alveari di Boneggio, in vasetti.",
     logo: "/loghi/mieliamo.svg",
     colore: "#8F4E07",
-    link: "https://mieliamo.boneggio.it/",
-    console: "https://mieliamo.boneggio.it/report.html",
+    link: "https://mieliamo-boneggio.pages.dev/",
+    console: "https://mieliamo-boneggio.pages.dev/report.html",   // quando ci sarà mieliamo.boneggio.it si cambia qui
     statoIniziale: "nascosto"   // resta nascosta finché non si mette il link con ?c= e la si attiva
   }
 ];
