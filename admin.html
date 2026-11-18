@@ -88,6 +88,17 @@ details[open]{display:flex;flex-direction:column;gap:10px}
 .qr svg{display:block;width:200px;height:200px}
 #secChiave{font-size:14px;overflow-wrap:anywhere;letter-spacing:.05em}
 pre{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-size:15px;line-height:1.7}
+.st-gruppi{display:flex;flex-direction:column;gap:18px}
+.st-g{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.st-g-head{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.st-g-head label{flex:1;min-width:160px}
+.st-v{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--vc,#999);border-radius:10px;padding:12px;display:grid;gap:8px}
+.st-v.off{opacity:.55}
+.st-v .riga{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.st-v .tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.st-v select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font:inherit}
+.chk{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
+@media (max-width:520px){.st-v .riga{grid-template-columns:1fr}}
 [hidden]{display:none!important}
 @media (max-width:520px){
   .row{grid-template-columns:auto 1fr}
@@ -122,6 +133,21 @@ pre{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);bord
   <p class="hint">Chi apre il portale senza questo link vede «Pagina riservata». Chi entra dal link resta riconosciuto per un anno sul suo telefono. Se il link gira troppo, premi «Cambia codice»: il vecchio smette di funzionare.</p>
   <p class="hint">L'ordine qui è l'ordine sul portale: usa le frecce per spostare. <b>Attivo</b> si può prenotare, <b>Sold out</b> appare opaco, <b>In arrivo</b> fa pulsare il logo, <b>Nascosto</b> non si vede.</p>
   <div class="list" id="list"></div>
+
+  <section class="sec" id="staffSec" aria-labelledby="stTit">
+    <h2 id="stTit">👷 Pagina dello staff</h2>
+    <p class="hint">Una pagina a parte con i link di lavoro (preparazione, ordini, aree personali), divisa per persona. Ha un codice suo: chi ha il link del portale clienti non la vede.</p>
+    <div class="link-box">
+      <div><b>Link della pagina staff</b><br><code id="stLink">…</code></div>
+      <div class="actions"><button class="btn primary" type="button" id="stCopy">Copia link</button><a class="btn" id="stVedi" href="/staff" target="_blank" rel="noopener">Vedi</a><button class="btn" type="button" id="stNuovo">Cambia codice</button></div>
+    </div>
+    <div id="stGruppi" class="st-gruppi"></div>
+    <div class="actions">
+      <button class="btn" type="button" id="stAddG">+ Aggiungi persona</button>
+      <button class="btn primary" type="button" id="stSave" disabled>Salva pagina staff</button>
+      <span class="status" id="stStatus"></span>
+    </div>
+  </section>
 
   <section class="sec" id="sicurezza" aria-labelledby="secTit">
     <h2 id="secTit">🔐 Sicurezza</h2>
@@ -294,8 +320,8 @@ $("save").addEventListener("click", async () => {
   }
 });
 
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && token && !dirty) avvia(); });
-window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && token && !dirty && !stDirty) avvia(); });
+window.addEventListener("beforeunload", e => { if (dirty || stDirty){ e.preventDefault(); e.returnValue = ""; } });
 
 // ---- Sicurezza (codice a 6 cifre) ----
 function secMostra(q){ ["secOff","secOn","secSetup","secCodici"].forEach(id => $(id).hidden = id !== q); }
@@ -335,6 +361,99 @@ $("secDisattiva").addEventListener("click", async () => {
   catch(e){ if (e.message !== "401") $("secErr").textContent = e.message; }
 });
 
+// ---- Pagina dello staff ----
+let ST = null, stVer = "0", stCod = "", stApp = {}, stDirty = false;
+const stUrl = () => location.origin + "/staff?c=" + stCod;
+function stSetDirty(v){ stDirty = v; $("stSave").disabled = !v; $("stStatus").textContent = v ? "Modifiche non salvate" : ""; $("stStatus").className = "status " + (v ? "dirty" : ""); }
+async function stCarica(){
+  try{
+    const d = await api("admin/staff");
+    ST = d.staff; stVer = d.versione; stCod = d.codice; stApp = d.app;
+    $("stLink").textContent = stUrl(); $("stVedi").href = stUrl();
+    stRender(); stSetDirty(false);
+  }catch(e){ if (e.message !== "401") $("stStatus").textContent = e.message; }
+}
+function stRender(){
+  const opz = sel => Object.entries(stApp).map(([k,a]) => `<option value="${k}" ${k===sel?"selected":""}>${esc(a.nome)}</option>`).join("");
+  $("stGruppi").innerHTML = ST.gruppi.map((g, gi) => `
+    <div class="st-g" data-g="${gi}">
+      <div class="st-g-head">
+        <label for="sg${gi}">Persona (sulla pagina: «Per …»)<input id="sg${gi}" data-gf="nome" value="${esc(g.nome)}"></label>
+        <button class="arrow" type="button" data-gmove="-1" aria-label="Sposta su" ${gi===0?"disabled":""}>▲</button>
+        <button class="arrow" type="button" data-gmove="1" aria-label="Sposta giù" ${gi===ST.gruppi.length-1?"disabled":""}>▼</button>
+        <button class="btn" type="button" data-gdel>Elimina persona</button>
+      </div>
+      ${g.voci.map((v, vi) => `
+      <div class="st-v ${v.visibile===false?"off":""}" data-v="${vi}" style="--vc:${esc((stApp[v.app]||stApp.altro).colore)}">
+        <div class="riga">
+          <label for="sa${gi}_${vi}">App<select id="sa${gi}_${vi}" data-vf="app">${opz(v.app)}</select></label>
+          <label for="st${gi}_${vi}">Titolo della scheda<input id="st${gi}_${vi}" data-vf="titolo" value="${esc(v.titolo)}"></label>
+        </div>
+        <label for="sd${gi}_${vi}">Descrizione<textarea id="sd${gi}_${vi}" data-vf="descrizione">${esc(v.descrizione)}</textarea></label>
+        <div class="riga">
+          <label for="sl${gi}_${vi}">Link<input id="sl${gi}_${vi}" data-vf="link" value="${esc(v.link)}" inputmode="url"></label>
+          <label for="sp${gi}_${vi}">Scritta del pulsante<input id="sp${gi}_${vi}" data-vf="pulsante" value="${esc(v.pulsante)}" placeholder="Apri" maxlength="30"></label>
+        </div>
+        <div class="tools">
+          <button class="arrow" type="button" data-vmove="-1" aria-label="Sposta su" ${vi===0?"disabled":""}>▲</button>
+          <button class="arrow" type="button" data-vmove="1" aria-label="Sposta giù" ${vi===g.voci.length-1?"disabled":""}>▼</button>
+          <label class="chk" for="sv${gi}_${vi}"><input type="checkbox" id="sv${gi}_${vi}" data-vf="visibile" ${v.visibile!==false?"checked":""}> Visibile</label>
+          <button class="btn" type="button" data-vdel>Elimina</button>
+        </div>
+      </div>`).join("")}
+      <button class="btn" type="button" data-vadd>+ Aggiungi link per ${esc(g.nome)}</button>
+    </div>`).join("");
+}
+$("stGruppi").addEventListener("input", e => {
+  const g = e.target.closest(".st-g"); if (!g) return; const gi = +g.dataset.g;
+  if (e.target.dataset.gf){ ST.gruppi[gi].nome = e.target.value; g.querySelector("[data-vadd]").textContent = "+ Aggiungi link per " + e.target.value; }
+  const v = e.target.closest(".st-v");
+  if (v && e.target.dataset.vf){ const vo = ST.gruppi[gi].voci[+v.dataset.v]; const f = e.target.dataset.vf;
+    vo[f] = f === "visibile" ? e.target.checked : e.target.value;
+    if (f === "visibile") v.classList.toggle("off", !e.target.checked);
+    if (f === "app") v.style.setProperty("--vc", (stApp[e.target.value]||stApp.altro).colore);
+  }
+  stSetDirty(true);
+});
+$("stGruppi").addEventListener("change", e => { if (e.target.matches("select,input[type=checkbox]")) e.target.dispatchEvent(new Event("input", {bubbles:true})); });
+$("stGruppi").addEventListener("click", e => {
+  const g = e.target.closest(".st-g"); if (!g) return; const gi = +g.dataset.g; const G = ST.gruppi;
+  const sw = (arr, i, j) => { [arr[i], arr[j]] = [arr[j], arr[i]]; };
+  if (e.target.closest("[data-gmove]")){ const d = +e.target.closest("[data-gmove]").dataset.gmove; sw(G, gi, gi + d); }
+  else if (e.target.closest("[data-gdel]")){
+    const b = e.target.closest("[data-gdel]");
+    if (!b.dataset.sure){ b.dataset.sure = "1"; b.textContent = "Sicuro? Tocca ancora"; setTimeout(() => { delete b.dataset.sure; b.textContent = "Elimina persona"; }, 4000); return; }
+    G.splice(gi, 1);
+  }
+  else if (e.target.closest("[data-vadd]")){ G[gi].voci.push({app:"altro", titolo:"", descrizione:"", link:"", pulsante:"", visibile:true}); }
+  else {
+    const v = e.target.closest(".st-v"); if (!v) return; const vi = +v.dataset.v;
+    if (e.target.closest("[data-vmove]")){ sw(G[gi].voci, vi, vi + (+e.target.closest("[data-vmove]").dataset.vmove)); }
+    else if (e.target.closest("[data-vdel]")){
+      const b = e.target.closest("[data-vdel]");
+      if (!b.dataset.sure){ b.dataset.sure = "1"; b.textContent = "Sicuro?"; setTimeout(() => { delete b.dataset.sure; b.textContent = "Elimina"; }, 4000); return; }
+      G[gi].voci.splice(vi, 1);
+    } else return;
+  }
+  stRender(); stSetDirty(true);
+});
+$("stAddG").addEventListener("click", () => { ST.gruppi.push({nome:"Nuova persona", voci:[]}); stRender(); stSetDirty(true); });
+$("stSave").addEventListener("click", async () => {
+  $("stSave").disabled = true; $("stStatus").textContent = "Salvataggio…";
+  try{ const d = await api("admin/staff", {method:"POST", body:{staff:ST, versione:stVer}}); ST = d.staff; stVer = d.versione; stRender(); stSetDirty(false); $("stStatus").textContent = "Salvato ✓"; $("stStatus").className = "status saved"; }
+  catch(e){ if (e.message !== "401"){ $("stStatus").textContent = e.message; $("stStatus").className = "status dirty"; $("stSave").disabled = false; } }
+});
+$("stCopy").addEventListener("click", async () => {
+  try{ await navigator.clipboard.writeText(stUrl()); $("stCopy").textContent = "Copiato ✓"; }catch(e){ $("stCopy").textContent = "Selezionalo e copialo"; }
+  setTimeout(() => $("stCopy").textContent = "Copia link", 2500);
+});
+$("stNuovo").addEventListener("click", async () => {
+  const b = $("stNuovo");
+  if (b.dataset.sure !== "1"){ b.dataset.sure = "1"; b.textContent = "Sicuro? Il vecchio link smette di funzionare"; setTimeout(() => { b.dataset.sure = ""; b.textContent = "Cambia codice"; }, 5000); return; }
+  try{ const d = await api("admin/nuovo-codice-staff", {method:"POST"}); stCod = d.codice; $("stLink").textContent = stUrl(); $("stVedi").href = stUrl(); b.dataset.sure = ""; b.textContent = "Codice cambiato ✓"; setTimeout(() => b.textContent = "Cambia codice", 2500); }
+  catch(e){ if (e.message !== "401") b.textContent = e.message; }
+});
+
 async function avvia(){
   if (!token) return mostraLogin();
   try{
@@ -342,7 +461,7 @@ async function avvia(){
     sezioni = d.sezioni; codice = d.codice || ""; versione = d.versione || "0";
     $("linkInvio").textContent = linkInvio(); $("vedi").href = linkInvio();
     $("login").hidden = true; $("app").hidden = false; $("bar").hidden = false;
-    render(); setDirty(false); secStato();
+    render(); setDirty(false); secStato(); if (!stDirty) stCarica();
   }catch(e){ if (e.message !== "401") mostraLogin(e.message); }
 }
 avvia();

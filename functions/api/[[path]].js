@@ -3,6 +3,8 @@
 // Indirizzi:
 //   GET  /api/portale?c=…    le sezioni visibili, in ordine (serve il codice del link o il cookie)
 //   POST /api/admin/nuovo-codice  cambia il codice del link da inviare
+//   GET  /api/staff?c=…      pagina dello staff (codice separato)
+//   GET/POST /api/admin/staff, POST /api/admin/nuovo-codice-staff
 //   POST /api/login          { password, codice } -> { token }
 //   POST /api/logout
 //   GET  /api/admin          (intestazione X-Sessione) tutte le sezioni, anche nascoste
@@ -64,11 +66,20 @@ const FINESTRA_MIN = 15;
 
 // ------------------------------------------------------------------
 export async function onRequest(ctx) {
+  try {
+    return await gestisci(ctx);
+  } catch (e) {
+    return json({ errore: (e && e.message) ? e.message : String(e) }, 400);
+  }
+}
+
+async function gestisci(ctx) {
   const { request, env } = ctx;
   const path = "/" + [].concat(ctx.params.path || []).join("/");
-  try {
+  {
     await preparaDB(env.DB);
     if (path === "/portale" && request.method === "GET") return pubblico(request, env);
+    if (path === "/staff" && request.method === "GET") return paginaStaff(request, env);
     if (path === "/login" && request.method === "POST") return login(request, env);
     if (path === "/logout" && request.method === "POST") return logout(request, env);
     if (path === "/admin") {
@@ -81,6 +92,16 @@ export async function onRequest(ctx) {
       if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
       return dueFattori(path.slice(11), request, env);
     }
+    if (path === "/admin/staff" || path === "/admin/nuovo-codice-staff") {
+      if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
+      if (path === "/admin/nuovo-codice-staff" && request.method === "POST") {
+        const codice = casuale(6);
+        await scriviImp(env.DB, "codice_staff", codice);
+        return json({ codice });
+      }
+      if (request.method === "GET") return json(await staffAdmin(env.DB));
+      if (request.method === "POST") return salvaStaff(request, env);
+    }
     if (path === "/admin/nuovo-codice" && request.method === "POST") {
       if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
       const codice = casuale(6);
@@ -88,8 +109,6 @@ export async function onRequest(ctx) {
       return json({ codice });
     }
     return json({ errore: "Indirizzo non trovato" }, 404);
-  } catch (e) {
-    return json({ errore: "Errore del server: " + (e && e.message ? e.message : e) }, 500);
   }
 }
 
@@ -221,6 +240,69 @@ async function sessioneValida(request, env) {
   if (!t) return false;
   const r = await env.DB.prepare("SELECT scade FROM sessioni WHERE token = ?").bind(t).first();
   return !!(r && r.scade > Date.now());
+}
+
+
+// ------------------------------------------------------------------
+// PAGINA DELLO STAFF (portale.boneggio.it/staff?c=CODICE)
+// Gruppi (es. "Amo", "Jacopo") con i link di lavoro. Tutto nel database:
+// i link personali non stanno nel codice, che è pubblico su GitHub.
+const APP_STAFF = {
+  oviamo:       { nome: "OviAmo",       logo: "/loghi/oviamo.svg",       colore: "#3f6b2a" },
+  oliamo:       { nome: "OliAmo",       logo: "/loghi/oliamo.svg",       colore: "#3D7A0E" },
+  castagnacopo: { nome: "Castagnacopo", logo: "/loghi/castagnacopo.svg", colore: "#7b3f1d" },
+  casalaggiu:   { nome: "Casalaggiù",   logo: "/loghi/casalaggiu.svg",   colore: "#0f7b77" },
+  altro:        { nome: "Boneggio",     logo: "/img/icona.svg",          colore: "#7a2a22" }
+};
+
+async function codiceStaff(db) {
+  let c = await leggiImp(db, "codice_staff");
+  if (!c) { c = casuale(6); await scriviImp(db, "codice_staff", c); }
+  return c;
+}
+async function leggiStaff(db) {
+  try { const d = JSON.parse((await leggiImp(db, "staff")) || "null"); if (d && Array.isArray(d.gruppi)) return d; } catch (e) {}
+  return { gruppi: [{ nome: "Amo", voci: [] }, { nome: "Jacopo", voci: [] }] };
+}
+async function staffAdmin(db) {
+  return { staff: await leggiStaff(db), codice: await codiceStaff(db), versione: (await leggiImp(db, "versione_staff")) || "0", app: APP_STAFF };
+}
+function pulisciStaff(d) {
+  const t = (v, n) => String(v ?? "").trim().slice(0, n);
+  const gruppi = (Array.isArray(d && d.gruppi) ? d.gruppi : []).slice(0, 20).map(g => ({
+    nome: t(g.nome, 40) || "Gruppo",
+    voci: (Array.isArray(g.voci) ? g.voci : []).slice(0, 40).map(v => {
+      const link = t(v.link, 500);
+      if (link && !/^https:\/\//i.test(link)) throw new Error("Il link «" + t(v.titolo, 40) + "» deve iniziare con https://");
+      return { app: APP_STAFF[v.app] ? v.app : "altro", titolo: t(v.titolo, 80), descrizione: t(v.descrizione, 300), link, pulsante: t(v.pulsante, 30), visibile: v.visibile !== false };
+    })
+  }));
+  return { gruppi };
+}
+async function salvaStaff(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const versione = (await leggiImp(env.DB, "versione_staff")) || "0";
+  if (String(body.versione ?? "") !== versione) return json({ errore: "Nel frattempo qualcuno ha salvato da un altro dispositivo. Ricarica la pagina e rifai la modifica.", conflitto: true }, 409);
+  const pulito = pulisciStaff(body.staff);
+  const nuova = String(Date.now());
+  await scriviImp(env.DB, "staff", JSON.stringify(pulito));
+  await scriviImp(env.DB, "versione_staff", nuova);
+  return json({ ok: true, staff: pulito, versione: nuova });
+}
+async function paginaStaff(request, env) {
+  const codice = await codiceStaff(env.DB);
+  const dalLink = new URL(request.url).searchParams.get("c") || "";
+  const dalCookie = leggiCookie(request, "staff_c");
+  const ok = (dalLink && await uguali(dalLink, codice)) || (dalCookie && await uguali(dalCookie, codice));
+  if (!ok) return json({ riservato: true }, 403);
+  const extra = {};
+  if (dalLink) extra["Set-Cookie"] = "staff_c=" + encodeURIComponent(codice) + "; Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax";
+  const d = await leggiStaff(env.DB);
+  const gruppi = d.gruppi.map(g => ({
+    nome: g.nome,
+    voci: g.voci.filter(v => v.visibile && v.link).map(v => ({ ...v, logo: APP_STAFF[v.app].logo, colore: APP_STAFF[v.app].colore, appNome: APP_STAFF[v.app].nome }))
+  })).filter(g => g.voci.length);
+  return json({ gruppi }, 200, extra);
 }
 
 // ------------------------------------------------------------------
