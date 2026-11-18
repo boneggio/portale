@@ -7,7 +7,8 @@
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="theme-color" content="#eef1ea">
 <meta name="description" content="Castagne, uova, olio e casa vacanze: scegli cosa prenotare.">
-<link rel="icon" href="/loghi/oliamo.svg" type="image/svg+xml">
+<link rel="icon" href="/img/icona.png" type="image/png">
+<link rel="apple-touch-icon" href="/img/icona.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -32,7 +33,11 @@
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{max-width:980px;margin:0 auto;padding:48px 20px 56px}
-header{margin-bottom:32px;max-width:40ch}
+header{margin-bottom:28px}
+.logo-testa{margin:0;line-height:0}
+.logo-testa img{display:block;width:min(100%,460px);height:auto}
+:root[data-theme="dark"] .logo-testa img{background:#fbf8f2;border-radius:16px;padding:12px 16px;box-sizing:border-box}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .logo-testa img{background:#fbf8f2;border-radius:16px;padding:12px 16px;box-sizing:border-box}}
 h1{font-family:var(--display);font-weight:800;font-size:clamp(40px,7vw,60px);line-height:1;margin:0 0 10px;letter-spacing:-.01em}
 .sub{margin:0;font-size:18px;color:var(--muted);text-wrap:balance}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
@@ -116,8 +121,7 @@ footer{margin-top:40px;font-size:13px;color:var(--muted)}
 <body>
 <div class="wrap">
   <header>
-    <h1>Boneggio</h1>
-    <p class="sub">Castagne, uova, olio e una casa vacanze. Scegli cosa prenotare.</p>
+    <h1 class="logo-testa"><img src="/img/logo-boneggio.png" alt="Boneggio" width="856" height="150"></h1>
   </header>
   <main class="grid" id="grid" aria-live="polite">
     <div class="msg">Caricamento…</div>
@@ -151,7 +155,6 @@ async function carica(){
     const d = await r.json();
     if (c) { try { history.replaceState(null, "", location.pathname); } catch(e) {} }
     if (d.riservato) {
-      document.querySelector(".sub").textContent = "";
       grid.innerHTML = '<div class="msg"><b>Pagina riservata.</b><br>Per entrare usa il link che ti abbiamo mandato.</div>';
       return;
     }
