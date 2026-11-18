@@ -17,10 +17,10 @@ Un solo link per tutte le app di Boneggio.
    nome variabile `DB`, database `portale`.
 5. Nel progetto Pages, **Impostazioni → Variabili e segreti**, di tipo *Segreto*:
    - `PASSWORD_ADMIN`: la password della console
-   - `TOTP_SECRET`: il segreto del codice a 6 cifre (facoltativo, ma consigliato)
 6. **Deployments → Riprova il deployment**, così prende database e segreti.
 7. **Domini personalizzati → portale.boneggio.it**. Su Aruba aggiungi un record CNAME `portale` → `portale.pages.dev`.
-8. Apri `https://portale.boneggio.it/admin.html`, entra e, in "Modifica testo e link", incolla per OliAmo e Castagnacopo il link con `?c=…`.
+8. Il codice a 6 cifre si attiva dalla console, nella sezione Sicurezza.
+9. Apri `https://portale.boneggio.it/admin.html`, entra e, in "Modifica testo e link", incolla per OliAmo e Castagnacopo il link con `?c=…`.
 
 ## Aggiungere una nuova app
 

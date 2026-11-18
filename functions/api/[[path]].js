@@ -10,7 +10,7 @@
 //
 // Variabili da impostare su Cloudflare (Settings > Variables and Secrets):
 //   PASSWORD_ADMIN   la password della console (segreto)
-//   TOTP_SECRET      facoltativo: segreto base32 per il codice a 6 cifre (segreto)
+// Il codice a 6 cifre si attiva, disattiva e rigenera dalla console (sezione Sicurezza).
 // Database D1 collegato con il nome DB.
 
 // ------------------------------------------------------------------
@@ -76,6 +76,10 @@ export async function onRequest(ctx) {
       if (!ok) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
       if (request.method === "GET") return json({ sezioni: await leggiSezioni(env.DB, true), codice: await codiceAccesso(env.DB) });
       if (request.method === "POST") return salva(request, env);
+    }
+    if (path.startsWith("/admin/2fa/")) {
+      if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
+      return dueFattori(path.slice(11), request, env);
     }
     if (path === "/admin/nuovo-codice" && request.method === "POST") {
       if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
@@ -182,11 +186,15 @@ async function login(request, env) {
 
   if (!env.PASSWORD_ADMIN) return json({ errore: "Password non ancora impostata su Cloudflare (PASSWORD_ADMIN)." }, 500);
   const body = await request.json().catch(() => ({}));
+  const segreto = await leggiImp(db, "totp");
   let ok = await uguali(String(body.password || ""), env.PASSWORD_ADMIN);
-  if (ok && env.TOTP_SECRET) ok = await verificaTotp(env.TOTP_SECRET, String(body.codice || "").replace(/\s/g, ""));
+  if (ok && segreto) {
+    const codice = String(body.codice || "").replace(/[\s-]/g, "");
+    ok = (await verificaTotp(segreto, codice)) || (await usaCodiceEmergenza(db, codice));
+  }
   if (!ok) {
     await db.prepare("INSERT INTO tentativi (ip, ts) VALUES (?, ?)").bind(ip, ora).run();
-    return json({ errore: env.TOTP_SECRET ? "Password o codice non corretti." : "Password non corretta." }, 401);
+    return json({ errore: segreto ? "Password o codice non corretti." : "Password non corretta." }, 401);
   }
   const token = casuale(32);
   await db.prepare("DELETE FROM sessioni WHERE scade < ?").bind(ora).run();
@@ -205,6 +213,75 @@ async function sessioneValida(request, env) {
   if (!t) return false;
   const r = await env.DB.prepare("SELECT scade FROM sessioni WHERE token = ?").bind(t).first();
   return !!(r && r.scade > Date.now());
+}
+
+// ------------------------------------------------------------------
+// Verifica in due passaggi gestita dalla console
+async function leggiImp(db, k) {
+  const r = await db.prepare("SELECT v FROM impostazioni WHERE k = ?").bind(k).first();
+  return r ? r.v : "";
+}
+async function scriviImp(db, k, v) {
+  if (v === null) return db.prepare("DELETE FROM impostazioni WHERE k = ?").bind(k).run();
+  return db.prepare("INSERT INTO impostazioni (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = ?2").bind(k, v).run();
+}
+async function sha(t) {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return [...new Uint8Array(h)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+async function usaCodiceEmergenza(db, codice) {
+  if (!/^[0-9a-f]{10}$/i.test(codice)) return false;
+  const lista = JSON.parse((await leggiImp(db, "recupero")) || "[]");
+  const h = await sha(codice.toLowerCase());
+  const i = lista.indexOf(h);
+  if (i < 0) return false;
+  lista.splice(i, 1);
+  await scriviImp(db, "recupero", JSON.stringify(lista));
+  return true;
+}
+function nuovoSegreto() {
+  const alfa = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const b = new Uint8Array(20); crypto.getRandomValues(b);
+  let bits = 0, val = 0, out = "";
+  for (const x of b) { val = (val << 8) | x; bits += 8; while (bits >= 5) { out += alfa[(val >>> (bits - 5)) & 31]; bits -= 5; } }
+  return out;
+}
+async function dueFattori(azione, request, env) {
+  const db = env.DB;
+  const body = request.method === "POST" ? await request.json().catch(() => ({})) : {};
+  const codice = String(body.codice || "").replace(/\s/g, "");
+  const attivo = !!(await leggiImp(db, "totp"));
+  if (azione === "stato") {
+    const rec = JSON.parse((await leggiImp(db, "recupero")) || "[]");
+    return json({ attivo, codiciEmergenza: rec.length });
+  }
+  if (azione === "prepara") {
+    // per rigenerare serve il codice attuale
+    if (attivo && !(await verificaTotp(await leggiImp(db, "totp"), codice))) return json({ errore: "Codice attuale non corretto." }, 400);
+    const segreto = nuovoSegreto();
+    await scriviImp(db, "totp_nuovo", segreto);
+    const uri = "otpauth://totp/" + encodeURIComponent("Portale Boneggio") + ":admin?secret=" + segreto + "&issuer=" + encodeURIComponent("Portale Boneggio");
+    return json({ segreto, uri });
+  }
+  if (azione === "conferma") {
+    const nuovo = await leggiImp(db, "totp_nuovo");
+    if (!nuovo) return json({ errore: "Premi di nuovo Attiva." }, 400);
+    if (!(await verificaTotp(nuovo, codice))) return json({ errore: "Il codice non corrisponde: controlla l'ora del telefono e riprova." }, 400);
+    const codici = [], hash = [];
+    for (let i = 0; i < 8; i++) { const c = casuale(5); codici.push(c); hash.push(await sha(c)); }
+    await scriviImp(db, "totp", nuovo);
+    await scriviImp(db, "totp_nuovo", null);
+    await scriviImp(db, "recupero", JSON.stringify(hash));
+    return json({ ok: true, codiciEmergenza: codici });
+  }
+  if (azione === "disattiva") {
+    if (!attivo) return json({ ok: true });
+    if (!(await verificaTotp(await leggiImp(db, "totp"), codice))) return json({ errore: "Codice non corretto." }, 400);
+    await scriviImp(db, "totp", null);
+    await scriviImp(db, "recupero", null);
+    return json({ ok: true });
+  }
+  return json({ errore: "Azione sconosciuta" }, 404);
 }
 
 // ------------------------------------------------------------------

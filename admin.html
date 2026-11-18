@@ -79,6 +79,15 @@ details[open]{display:flex;flex-direction:column;gap:10px}
 .link-box{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:14px 0 4px}
 .link-box code{font-size:13px;overflow-wrap:anywhere;color:var(--muted)}
 .link-box .actions{display:flex;gap:8px;flex-wrap:wrap}
+.sec{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.sec h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0}
+.sec .hint{margin:0}
+.sec .actions{display:flex;flex-wrap:wrap;gap:8px}
+.sec > div{display:flex;flex-direction:column;gap:12px}
+.qr{background:#fff;padding:12px;border-radius:12px;align-self:flex-start}
+.qr svg{display:block;width:200px;height:200px}
+#secChiave{font-size:14px;overflow-wrap:anywhere;letter-spacing:.05em}
+pre{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);border-radius:10px;font-size:15px;line-height:1.7}
 [hidden]{display:none!important}
 @media (max-width:520px){
   .row{grid-template-columns:auto 1fr}
@@ -93,7 +102,7 @@ details[open]{display:flex;flex-direction:column;gap:10px}
 <form class="login" id="login" hidden>
   <h1>Console Boneggio</h1>
   <label for="pw">Password<input id="pw" type="password" autocomplete="current-password" required></label>
-  <label for="otp">Codice a 6 cifre (se attivo)<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" placeholder="123456"></label>
+  <label for="otp">Codice a 6 cifre (o codice di emergenza)<input id="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456"></label>
   <p class="err" id="loginErr"></p>
   <button class="btn primary" type="submit">Entra</button>
 </form>
@@ -113,6 +122,31 @@ details[open]{display:flex;flex-direction:column;gap:10px}
   <p class="hint">Chi apre il portale senza questo link vede «Pagina riservata». Chi entra dal link resta riconosciuto per un anno sul suo telefono. Se il link gira troppo, premi «Cambia codice»: il vecchio smette di funzionare.</p>
   <p class="hint">L'ordine qui è l'ordine sul portale: usa le frecce per spostare. <b>Attivo</b> si può prenotare, <b>Sold out</b> appare opaco, <b>In arrivo</b> fa pulsare il logo, <b>Nascosto</b> non si vede.</p>
   <div class="list" id="list"></div>
+
+  <section class="sec" id="sicurezza" aria-labelledby="secTit">
+    <h2 id="secTit">🔐 Sicurezza</h2>
+    <p class="hint" id="secStato">Caricamento…</p>
+    <div id="secOff" hidden>
+      <button class="btn primary" type="button" id="secAttiva">Attiva il codice a 6 cifre</button>
+    </div>
+    <div id="secOn" hidden>
+      <label for="secCodice">Codice a 6 cifre attuale (serve per rigenerare o disattivare)<input id="secCodice" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
+      <div class="actions"><button class="btn" type="button" id="secRigenera">Rigenera</button><button class="btn" type="button" id="secDisattiva">Disattiva</button></div>
+    </div>
+    <div id="secSetup" hidden>
+      <p class="hint">1. Inquadra il QR con l'app <b>Password</b> di iPhone (o con un'altra app di autenticazione). Se non riesci, inserisci a mano la chiave qui sotto.</p>
+      <div class="qr" id="secQr"></div>
+      <code id="secChiave"></code>
+      <label for="secConf">2. Scrivi il codice a 6 cifre che vedi sul telefono<input id="secConf" inputmode="numeric" maxlength="6" autocomplete="one-time-code"></label>
+      <div class="actions"><button class="btn primary" type="button" id="secConferma">Conferma e attiva</button><button class="btn" type="button" id="secAnnulla">Annulla</button></div>
+    </div>
+    <div id="secCodici" hidden>
+      <p class="hint"><b>Codici di emergenza.</b> Ognuno funziona una volta sola al posto del codice a 6 cifre, se perdi il telefono. Salvali ora, per esempio nelle Note della voce in Password: non li vedrai più.</p>
+      <pre id="secLista"></pre>
+      <button class="btn primary" type="button" id="secFatto">Li ho salvati</button>
+    </div>
+    <p class="err" id="secErr"></p>
+  </section>
 </div>
 
 <div class="bar" id="bar" hidden>
@@ -122,6 +156,7 @@ details[open]{display:flex;flex-direction:column;gap:10px}
   </div>
 </div>
 
+<script src="/js/qrcode.js"></script>
 <script>
 const STATI = [["attivo","Attivo"],["spento","Sold out"],["arrivo","In arrivo"],["nascosto","Nascosto"]];
 let token = null, sezioni = [], dirty = false, codice = "";
@@ -260,6 +295,44 @@ $("save").addEventListener("click", async () => {
 
 window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
 
+// ---- Sicurezza (codice a 6 cifre) ----
+function secMostra(q){ ["secOff","secOn","secSetup","secCodici"].forEach(id => $(id).hidden = id !== q); }
+async function secStato(){
+  $("secErr").textContent = "";
+  try{
+    const d = await api("admin/2fa/stato");
+    if (d.attivo){ $("secStato").textContent = "Codice a 6 cifre attivo ✓ · codici di emergenza rimasti: " + d.codiciEmergenza; secMostra("secOn"); }
+    else { $("secStato").textContent = "Il codice a 6 cifre non è attivo: per entrare basta la password."; secMostra("secOff"); }
+  }catch(e){ if (e.message !== "401") $("secErr").textContent = e.message; }
+}
+async function secPrepara(codice){
+  $("secErr").textContent = "";
+  try{
+    const d = await api("admin/2fa/prepara", {method:"POST", body:{codice}});
+    $("secQr").innerHTML = "";
+    try{ const q = qrcode(0, "M"); q.addData(d.uri); q.make(); $("secQr").innerHTML = q.createSvgTag({cellSize:5, margin:2, scalable:true}); }catch(e){ $("secQr").textContent = "QR non disponibile: usa la chiave."; }
+    $("secChiave").textContent = d.segreto.replace(/(.{4})/g, "$1 ").trim();
+    $("secConf").value = ""; secMostra("secSetup"); $("secStato").textContent = "Nuovo codice: non è ancora attivo finché non confermi.";
+  }catch(e){ if (e.message !== "401") $("secErr").textContent = e.message; }
+}
+$("secAttiva").addEventListener("click", () => secPrepara(""));
+$("secRigenera").addEventListener("click", () => secPrepara($("secCodice").value));
+$("secAnnulla").addEventListener("click", secStato);
+$("secConferma").addEventListener("click", async () => {
+  $("secErr").textContent = "";
+  try{
+    const d = await api("admin/2fa/conferma", {method:"POST", body:{codice:$("secConf").value}});
+    $("secLista").textContent = d.codiciEmergenza.join("\n");
+    $("secStato").textContent = "Codice a 6 cifre attivo ✓"; secMostra("secCodici");
+  }catch(e){ if (e.message !== "401") $("secErr").textContent = e.message; }
+});
+$("secFatto").addEventListener("click", () => { $("secLista").textContent = ""; secStato(); });
+$("secDisattiva").addEventListener("click", async () => {
+  $("secErr").textContent = "";
+  try{ await api("admin/2fa/disattiva", {method:"POST", body:{codice:$("secCodice").value}}); $("secCodice").value = ""; secStato(); }
+  catch(e){ if (e.message !== "401") $("secErr").textContent = e.message; }
+});
+
 async function avvia(){
   if (!token) return mostraLogin();
   try{
@@ -267,7 +340,7 @@ async function avvia(){
     sezioni = d.sezioni; codice = d.codice || "";
     $("linkInvio").textContent = linkInvio(); $("vedi").href = linkInvio();
     $("login").hidden = true; $("app").hidden = false; $("bar").hidden = false;
-    render(); setDirty(false);
+    render(); setDirty(false); secStato();
   }catch(e){ if (e.message !== "401") mostraLogin(e.message); }
 }
 avvia();
