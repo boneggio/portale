@@ -97,6 +97,22 @@ pre{margin:0;padding:12px;background:var(--bg);border:1px solid var(--line);bord
 .st-v .riga{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .st-v .tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .st-v select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);font:inherit}
+.ord{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.ord-tit{font-weight:700;font-size:14px}
+.ord-tit span{font-weight:500;color:var(--muted);font-size:13px}
+.ord-r{display:grid;grid-template-columns:auto auto 32px 1fr auto auto;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-left:4px solid var(--vc,#999);border-radius:10px;background:var(--bg);cursor:grab;user-select:none}
+.ord-r.off{opacity:.55}
+.ord-r.drag{opacity:.4}
+.ord-r.sopra{outline:2px dashed var(--accent);outline-offset:2px}
+.ord-r img{width:32px;height:32px;object-fit:contain}
+.ord-r .num{font-weight:800;font-variant-numeric:tabular-nums;color:var(--muted);min-width:1.2em;text-align:right}
+.ord-r .ord-n{font-weight:600;min-width:0;overflow-wrap:break-word;hyphens:auto;line-height:1.25}
+@media (max-width:520px){.ord-r{gap:6px;padding:6px}.ord-r .arrow{width:30px}}
+.maniglia{color:var(--muted);letter-spacing:-2px;font-size:16px;cursor:grab;padding:6px 2px;touch-action:none}
+.st-det{display:flex;flex-direction:column;gap:10px}
+.st-det[open]{gap:10px}
+.st-det > summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--muted);padding:4px 0}
+.st-det[open] > .st-v{margin-top:10px}
 .chk{flex-direction:row;align-items:center;gap:6px;color:var(--ink)}
 @media (max-width:520px){.st-v .riga{grid-template-columns:1fr}}
 [hidden]{display:none!important}
@@ -362,7 +378,7 @@ $("secDisattiva").addEventListener("click", async () => {
 });
 
 // ---- Pagina dello staff ----
-let ST = null, stVer = "0", stCod = "", stApp = {}, stDirty = false;
+let ST = null, stVer = "0", stCod = "", stApp = {}, stDirty = false; const stAperti = new Set();
 const stUrl = () => location.origin + "/staff?c=" + stCod;
 function stSetDirty(v){ stDirty = v; $("stSave").disabled = !v; $("stStatus").textContent = v ? "Modifiche non salvate" : ""; $("stStatus").className = "status " + (v ? "dirty" : ""); }
 async function stCarica(){
@@ -383,6 +399,19 @@ function stRender(){
         <button class="arrow" type="button" data-gmove="1" aria-label="Sposta giù" ${gi===ST.gruppi.length-1?"disabled":""}>▼</button>
         <button class="btn" type="button" data-gdel>Elimina persona</button>
       </div>
+      <div class="ord" aria-label="Ordine delle schede di ${esc(g.nome)}">
+        <div class="ord-tit">Ordine delle schede <span>(trascina o usa le frecce)</span></div>
+        ${g.voci.length ? g.voci.map((v, vi) => `
+        <div class="ord-r ${v.visibile===false?"off":""}" draggable="true" data-v="${vi}" style="--vc:${esc((stApp[v.app]||stApp.altro).colore)}">
+          <span class="maniglia" aria-hidden="true">⋮⋮</span>
+          <span class="num">${vi+1}</span>
+          <img src="${esc((stApp[v.app]||stApp.altro).logo)}" alt="">
+          <span class="ord-n">${esc(v.titolo || "(senza titolo)")}${v.visibile===false?" · nascosta":""}</span>
+          <button class="arrow" type="button" data-vmove="-1" aria-label="Sposta su ${esc(v.titolo)}" ${vi===0?"disabled":""}>▲</button>
+          <button class="arrow" type="button" data-vmove="1" aria-label="Sposta giù ${esc(v.titolo)}" ${vi===g.voci.length-1?"disabled":""}>▼</button>
+        </div>`).join("") : '<div class="hint">Nessuna scheda.</div>'}
+      </div>
+      <details class="st-det"><summary>Modifica le schede di ${esc(g.nome)} (titolo, descrizione, link)</summary>
       ${g.voci.map((v, vi) => `
       <div class="st-v ${v.visibile===false?"off":""}" data-v="${vi}" style="--vc:${esc((stApp[v.app]||stApp.altro).colore)}">
         <div class="riga">
@@ -401,8 +430,10 @@ function stRender(){
           <button class="btn" type="button" data-vdel>Elimina</button>
         </div>
       </div>`).join("")}
+      </details>
       <button class="btn" type="button" data-vadd>+ Aggiungi link per ${esc(g.nome)}</button>
     </div>`).join("");
+  $("stGruppi").querySelectorAll("details.st-det").forEach((d, gi) => { if (stAperti.has(gi)) d.open = true; d.addEventListener("toggle", () => d.open ? stAperti.add(gi) : stAperti.delete(gi)); });
 }
 $("stGruppi").addEventListener("input", e => {
   const g = e.target.closest(".st-g"); if (!g) return; const gi = +g.dataset.g;
@@ -425,9 +456,9 @@ $("stGruppi").addEventListener("click", e => {
     if (!b.dataset.sure){ b.dataset.sure = "1"; b.textContent = "Sicuro? Tocca ancora"; setTimeout(() => { delete b.dataset.sure; b.textContent = "Elimina persona"; }, 4000); return; }
     G.splice(gi, 1);
   }
-  else if (e.target.closest("[data-vadd]")){ G[gi].voci.push({app:"altro", titolo:"", descrizione:"", link:"", pulsante:"", visibile:true}); }
+  else if (e.target.closest("[data-vadd]")){ stAperti.add(gi); G[gi].voci.push({app:"altro", titolo:"", descrizione:"", link:"", pulsante:"", visibile:true}); }
   else {
-    const v = e.target.closest(".st-v"); if (!v) return; const vi = +v.dataset.v;
+    const v = e.target.closest(".st-v, .ord-r"); if (!v) return; const vi = +v.dataset.v;
     if (e.target.closest("[data-vmove]")){ sw(G[gi].voci, vi, vi + (+e.target.closest("[data-vmove]").dataset.vmove)); }
     else if (e.target.closest("[data-vdel]")){
       const b = e.target.closest("[data-vdel]");
@@ -437,6 +468,17 @@ $("stGruppi").addEventListener("click", e => {
   }
   stRender(); stSetDirty(true);
 });
+// trascina per riordinare (mouse e dita)
+let trascina = null;
+$("stGruppi").addEventListener("dragstart", e => { const r = e.target.closest(".ord-r"); if (!r) return; trascina = { gi: +r.closest(".st-g").dataset.g, vi: +r.dataset.v }; r.classList.add("drag"); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); } catch(x) {} });
+$("stGruppi").addEventListener("dragover", e => { const r = e.target.closest(".ord-r"); if (!r || !trascina || +r.closest(".st-g").dataset.g !== trascina.gi) return; e.preventDefault(); $("stGruppi").querySelectorAll(".ord-r.sopra").forEach(x => x.classList.remove("sopra")); r.classList.add("sopra"); });
+$("stGruppi").addEventListener("drop", e => { const r = e.target.closest(".ord-r"); if (!r || !trascina) return; e.preventDefault(); const gi = trascina.gi, da = trascina.vi, a = +r.dataset.v; trascina = null; if (+r.closest(".st-g").dataset.g !== gi || da === a) { stRender(); return; } const V = ST.gruppi[gi].voci; V.splice(a, 0, V.splice(da, 1)[0]); stRender(); stSetDirty(true); });
+$("stGruppi").addEventListener("dragend", () => { trascina = null; $("stGruppi").querySelectorAll(".drag,.sopra").forEach(x => x.classList.remove("drag","sopra")); });
+// su telefono: tieni premuta la maniglia e trascina
+$("stGruppi").addEventListener("touchstart", e => { const m = e.target.closest(".maniglia"); if (!m) return; const r = m.closest(".ord-r"); trascina = { gi: +r.closest(".st-g").dataset.g, vi: +r.dataset.v, el: r }; r.classList.add("drag"); }, {passive:true});
+$("stGruppi").addEventListener("touchmove", e => { if (!trascina || !trascina.el) return; e.preventDefault(); const t = e.touches[0]; const sotto = document.elementFromPoint(t.clientX, t.clientY); const r = sotto && sotto.closest(".ord-r"); $("stGruppi").querySelectorAll(".ord-r.sopra").forEach(x => x.classList.remove("sopra")); if (r && +r.closest(".st-g").dataset.g === trascina.gi) { r.classList.add("sopra"); trascina.a = +r.dataset.v; } }, {passive:false});
+$("stGruppi").addEventListener("touchend", () => { if (!trascina || !trascina.el) return; const { gi, vi, a } = trascina; trascina = null; if (a == null || a === vi) { stRender(); return; } const V = ST.gruppi[gi].voci; V.splice(a, 0, V.splice(vi, 1)[0]); stRender(); stSetDirty(true); });
+
 $("stAddG").addEventListener("click", () => { ST.gruppi.push({nome:"Nuova persona", voci:[]}); stRender(); stSetDirty(true); });
 $("stSave").addEventListener("click", async () => {
   $("stSave").disabled = true; $("stStatus").textContent = "Salvataggio…";
