@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Boneggio</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="theme-color" content="#eef1ea">
 <meta name="description" content="Castagne, uova, olio e casa vacanze: scegli cosa prenotare.">
 <link rel="icon" href="/loghi/oliamo.svg" type="image/svg+xml">
@@ -109,8 +110,16 @@ function scheda(s){
 async function carica(){
   const grid = document.getElementById("grid");
   try{
-    const r = await fetch("/api/portale", {cache:"no-store"});
+    const qs = new URLSearchParams(location.search);
+    const c = qs.get("c");
+    const r = await fetch("/api/portale" + (c ? "?c=" + encodeURIComponent(c) : ""), {cache:"no-store", credentials:"same-origin"});
     const d = await r.json();
+    if (c) { try { history.replaceState(null, "", location.pathname); } catch(e) {} }
+    if (d.riservato) {
+      document.querySelector(".sub").textContent = "";
+      grid.innerHTML = '<div class="msg"><b>Pagina riservata.</b><br>Per entrare usa il link che ti abbiamo mandato.</div>';
+      return;
+    }
     if (!r.ok) throw new Error(d.errore || r.status);
     grid.innerHTML = d.sezioni.length ? d.sezioni.map(scheda).join("") : '<div class="msg">Al momento non ci sono prenotazioni aperte. Torna a trovarci presto.</div>';
   }catch(e){

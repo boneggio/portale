@@ -1,7 +1,8 @@
 // Portale Boneggio – API (Cloudflare Pages Functions + D1)
 //
 // Indirizzi:
-//   GET  /api/portale        pubblico: le sezioni visibili, in ordine
+//   GET  /api/portale?c=…    le sezioni visibili, in ordine (serve il codice del link o il cookie)
+//   POST /api/admin/nuovo-codice  cambia il codice del link da inviare
 //   POST /api/login          { password, codice } -> { token }
 //   POST /api/logout
 //   GET  /api/admin          (intestazione X-Sessione) tutte le sezioni, anche nascoste
@@ -67,14 +68,20 @@ export async function onRequest(ctx) {
   const path = "/" + [].concat(ctx.params.path || []).join("/");
   try {
     await preparaDB(env.DB);
-    if (path === "/portale" && request.method === "GET") return pubblico(env);
+    if (path === "/portale" && request.method === "GET") return pubblico(request, env);
     if (path === "/login" && request.method === "POST") return login(request, env);
     if (path === "/logout" && request.method === "POST") return logout(request, env);
     if (path === "/admin") {
       const ok = await sessioneValida(request, env);
       if (!ok) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
-      if (request.method === "GET") return json({ sezioni: await leggiSezioni(env.DB, true) });
+      if (request.method === "GET") return json({ sezioni: await leggiSezioni(env.DB, true), codice: await codiceAccesso(env.DB) });
       if (request.method === "POST") return salva(request, env);
+    }
+    if (path === "/admin/nuovo-codice" && request.method === "POST") {
+      if (!(await sessioneValida(request, env))) return json({ errore: "Accesso scaduto: entra di nuovo." }, 401);
+      const codice = casuale(6);
+      await env.DB.prepare("INSERT INTO impostazioni (k, v) VALUES ('codice', ?1) ON CONFLICT(k) DO UPDATE SET v = ?1").bind(codice).run();
+      return json({ codice });
     }
     return json({ errore: "Indirizzo non trovato" }, 404);
   } catch (e) {
@@ -87,7 +94,8 @@ async function preparaDB(db) {
   await db.batch([
     db.prepare("CREATE TABLE IF NOT EXISTS sezioni (id TEXT PRIMARY KEY, ordine INTEGER, stato TEXT, nome TEXT, descrizione TEXT, link TEXT)"),
     db.prepare("CREATE TABLE IF NOT EXISTS sessioni (token TEXT PRIMARY KEY, scade INTEGER)"),
-    db.prepare("CREATE TABLE IF NOT EXISTS tentativi (ip TEXT, ts INTEGER)")
+    db.prepare("CREATE TABLE IF NOT EXISTS tentativi (ip TEXT, ts INTEGER)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS impostazioni (k TEXT PRIMARY KEY, v TEXT)")
   ]);
 }
 
@@ -116,9 +124,31 @@ async function leggiSezioni(db, admin) {
   }));
 }
 
-async function pubblico(env) {
+// Codice del link da inviare (portale.boneggio.it/?c=CODICE). Si crea da solo la prima volta.
+async function codiceAccesso(db) {
+  const r = await db.prepare("SELECT v FROM impostazioni WHERE k = 'codice'").first();
+  if (r && r.v) return r.v;
+  const codice = casuale(6);
+  await db.prepare("INSERT OR IGNORE INTO impostazioni (k, v) VALUES ('codice', ?)").bind(codice).run();
+  return (await db.prepare("SELECT v FROM impostazioni WHERE k = 'codice'").first()).v;
+}
+
+function leggiCookie(request, nome) {
+  const c = request.headers.get("Cookie") || "";
+  const m = c.match(new RegExp("(?:^|;\\s*)" + nome + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+async function pubblico(request, env) {
+  const codice = await codiceAccesso(env.DB);
+  const dalLink = new URL(request.url).searchParams.get("c") || "";
+  const dalCookie = leggiCookie(request, "portale_c");
+  const ok = (dalLink && await uguali(dalLink, codice)) || (dalCookie && await uguali(dalCookie, codice));
+  if (!ok) return json({ riservato: true }, 403);
+  const extra = {};
+  if (dalLink) extra["Set-Cookie"] = "portale_c=" + encodeURIComponent(codice) + "; Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax";
   const sezioni = await leggiSezioni(env.DB, false);
-  return json({ sezioni }, 200, { "Cache-Control": "no-store" });
+  return json({ sezioni }, 200, extra);
 }
 
 async function salva(request, env) {

@@ -76,6 +76,9 @@ details[open]{display:flex;flex-direction:column;gap:10px}
 .status{font-weight:600;color:var(--muted)}
 .status.dirty{color:var(--warn)}
 .status.saved{color:var(--ok)}
+.link-box{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin:14px 0 4px}
+.link-box code{font-size:13px;overflow-wrap:anywhere;color:var(--muted)}
+.link-box .actions{display:flex;gap:8px;flex-wrap:wrap}
 [hidden]{display:none!important}
 @media (max-width:520px){
   .row{grid-template-columns:auto 1fr}
@@ -99,11 +102,15 @@ details[open]{display:flex;flex-direction:column;gap:10px}
   <div class="top">
     <h1>Console Boneggio</h1>
     <div class="actions">
-      <a class="btn" href="/" target="_blank" rel="noopener">Vedi il portale</a>
-      <button class="btn" type="button" id="copy">Copia link da inviare</button>
+      <a class="btn" id="vedi" href="/" target="_blank" rel="noopener">Vedi il portale</a>
       <button class="btn" type="button" id="logout">Esci</button>
     </div>
   </div>
+  <div class="link-box">
+    <div><b>Link da inviare</b><br><code id="linkInvio">…</code></div>
+    <div class="actions"><button class="btn primary" type="button" id="copy">Copia link</button><button class="btn" type="button" id="nuovoCodice">Cambia codice</button></div>
+  </div>
+  <p class="hint">Chi apre il portale senza questo link vede «Pagina riservata». Chi entra dal link resta riconosciuto per un anno sul suo telefono. Se il link gira troppo, premi «Cambia codice»: il vecchio smette di funzionare.</p>
   <p class="hint">L'ordine qui è l'ordine sul portale: usa le frecce per spostare. <b>Attivo</b> si può prenotare, <b>Sold out</b> appare opaco, <b>In arrivo</b> fa pulsare il logo, <b>Nascosto</b> non si vede.</p>
   <div class="list" id="list"></div>
 </div>
@@ -117,7 +124,8 @@ details[open]{display:flex;flex-direction:column;gap:10px}
 
 <script>
 const STATI = [["attivo","Attivo"],["spento","Sold out"],["arrivo","In arrivo"],["nascosto","Nascosto"]];
-let token = null, sezioni = [], dirty = false;
+let token = null, sezioni = [], dirty = false, codice = "";
+const linkInvio = () => location.origin + "/?c=" + codice;
 try { token = localStorage.getItem("boneggio_sessione"); } catch(e) {}
 
 const $ = id => document.getElementById(id);
@@ -159,10 +167,23 @@ $("logout").addEventListener("click", async () => {
 });
 
 $("copy").addEventListener("click", async () => {
-  const url = location.origin + "/";
-  try{ await navigator.clipboard.writeText(url); $("copy").textContent = "Copiato ✓"; }
-  catch(e){ $("copy").textContent = url; }
-  setTimeout(() => $("copy").textContent = "Copia link da inviare", 2500);
+  try{ await navigator.clipboard.writeText(linkInvio()); $("copy").textContent = "Copiato ✓"; }
+  catch(e){ $("copy").textContent = "Selezionalo e copialo"; }
+  setTimeout(() => $("copy").textContent = "Copia link", 2500);
+});
+$("nuovoCodice").addEventListener("click", async () => {
+  if ($("nuovoCodice").dataset.conferma !== "1"){
+    $("nuovoCodice").dataset.conferma = "1";
+    $("nuovoCodice").textContent = "Sicuro? Il vecchio link smette di funzionare";
+    setTimeout(() => { $("nuovoCodice").dataset.conferma = ""; $("nuovoCodice").textContent = "Cambia codice"; }, 5000);
+    return;
+  }
+  try{
+    const d = await api("admin/nuovo-codice", {method:"POST"});
+    codice = d.codice; $("linkInvio").textContent = linkInvio(); $("vedi").href = linkInvio();
+    $("nuovoCodice").dataset.conferma = ""; $("nuovoCodice").textContent = "Codice cambiato ✓";
+    setTimeout(() => $("nuovoCodice").textContent = "Cambia codice", 2500);
+  }catch(e){ if (e.message !== "401") $("nuovoCodice").textContent = e.message; }
 });
 
 function setDirty(v){
@@ -243,7 +264,8 @@ async function avvia(){
   if (!token) return mostraLogin();
   try{
     const d = await api("admin");
-    sezioni = d.sezioni;
+    sezioni = d.sezioni; codice = d.codice || "";
+    $("linkInvio").textContent = linkInvio(); $("vedi").href = linkInvio();
     $("login").hidden = true; $("app").hidden = false; $("bar").hidden = false;
     render(); setDirty(false);
   }catch(e){ if (e.message !== "401") mostraLogin(e.message); }
